@@ -12,7 +12,7 @@ void main() {
     await tester.pump();
 
     // Verify app title or core elements exist
-    expect(find.text('FCM Notification Tester'), findsOneWidget);
+    expect(find.text('Firebase Notification Test Tools'), findsOneWidget);
     expect(find.text('Firebase Service Account'), findsOneWidget);
     expect(find.text('Message Configuration'), findsOneWidget);
   });

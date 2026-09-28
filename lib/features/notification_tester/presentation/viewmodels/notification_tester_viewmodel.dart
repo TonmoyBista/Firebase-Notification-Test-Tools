@@ -291,9 +291,8 @@ class NotificationTesterViewModel extends ChangeNotifier {
 
       if (saveLocally) {
         await manageHistoryUseCase.saveServiceAccount(jsonString);
+        _successMessage = 'Loaded project: ${parsed.projectId}';
       }
-
-      _successMessage = 'Loaded project: ${parsed.projectId}';
     } catch (e) {
       _errorMessage = e.toString();
       _serviceAccount = null;
@@ -424,6 +423,18 @@ class NotificationTesterViewModel extends ChangeNotifier {
     await manageHistoryUseCase.clearHistory();
     _history = [];
     notifyListeners();
+  }
+
+  String? consumeErrorMessage() {
+    final msg = _errorMessage;
+    _errorMessage = null;
+    return msg;
+  }
+
+  String? consumeSuccessMessage() {
+    final msg = _successMessage;
+    _successMessage = null;
+    return msg;
   }
 
   void _clearMessages() {

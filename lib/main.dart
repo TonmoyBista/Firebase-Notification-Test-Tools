@@ -52,7 +52,7 @@ class FcmTesterApp extends StatelessWidget {
         ),
       ],
       child: MaterialApp(
-        title: 'FCM v1 Notification Tester',
+        title: 'Firebase Notification Test Tools',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,

@@ -1,7 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="firebase_notification_test_tools"
+        android:label="Firebase Notification Test Tools"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

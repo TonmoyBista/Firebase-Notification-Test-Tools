@@ -28,7 +28,7 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             Icon(Icons.help_outline_rounded, color: AppTheme.primaryAmber),
             SizedBox(width: 8),
-            Text('FCM v1 Notification Tester'),
+            Text('Firebase Notification Test Tools'),
           ],
         ),
         content: SizedBox(
@@ -103,26 +103,35 @@ class _HomeScreenState extends State<HomeScreen> {
     final vm = context.watch<NotificationTesterViewModel>();
     final isDesktop = MediaQuery.of(context).size.width >= 900;
 
-    // Listen to messages for snackbars
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (vm.errorMessage != null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(vm.errorMessage!),
-            backgroundColor: AppTheme.errorRed,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      } else if (vm.successMessage != null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(vm.successMessage!),
-            backgroundColor: AppTheme.successGreen,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    });
+    // Single-shot consumed snackbars (Fix for persistent snackbar bug)
+    final error = vm.consumeErrorMessage();
+    final success = vm.consumeSuccessMessage();
+    if (error != null || success != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final messenger = ScaffoldMessenger.of(context);
+        messenger.hideCurrentSnackBar();
+        if (error != null) {
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text(error),
+              backgroundColor: AppTheme.errorRed,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        } else if (success != null) {
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text(success),
+              backgroundColor: AppTheme.successGreen,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      });
+    }
 
     return Scaffold(
       key: _scaffoldKey,
@@ -145,9 +154,12 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             const SizedBox(width: 10),
-            const Text(
-              'FCM Notification Tester',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            const Flexible(
+              child: Text(
+                'Firebase Notification Test Tools',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             const SizedBox(width: 8),
             Container(
@@ -189,24 +201,40 @@ class _HomeScreenState extends State<HomeScreen> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Left Column: Configuration & Payload Builder
+        // Left Column: Configuration & Payload Builder with KEEP-IN-PLACE Send Button
         Expanded(
           flex: 6,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const ServiceAccountCard(),
-                const SizedBox(height: 14),
-                const QuickTemplatesBar(),
-                const SizedBox(height: 14),
-                _buildPayloadCard(context, vm),
-                const SizedBox(height: 16),
-                _buildSendButton(vm),
-                const SizedBox(height: 24),
-              ],
-            ),
+          child: Column(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const ServiceAccountCard(),
+                      const SizedBox(height: 14),
+                      const QuickTemplatesBar(),
+                      const SizedBox(height: 14),
+                      _buildPayloadCard(context, vm),
+                      const SizedBox(height: 16),
+                    ],
+                  ),
+                ),
+              ),
+              // Fixed, persistent bottom bar keeping Send Notification button in place
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: const BoxDecoration(
+                  color: AppTheme.darkSurface,
+                  border: Border(
+                    top: BorderSide(color: AppTheme.darkBorder),
+                    right: BorderSide(color: AppTheme.darkBorder),
+                  ),
+                ),
+                child: _buildSendButton(vm),
+              ),
+            ],
           ),
         ),
 
@@ -229,56 +257,74 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildMobileLayout(BuildContext context, NotificationTesterViewModel vm) {
-    return DefaultTabController(
-      length: 2,
-      child: Column(
-        children: [
-          Container(
-            color: AppTheme.darkSurface,
-            child: TabBar(
-              tabs: [
-                const Tab(icon: Icon(Icons.edit_note_rounded), text: 'Message Builder'),
-                Tab(
-                  icon: Badge(
-                    isLabelVisible: vm.fcmResponse != null,
-                    backgroundColor: vm.fcmResponse?.isSuccess == true
-                        ? AppTheme.successGreen
-                        : AppTheme.errorRed,
-                    child: const Icon(Icons.terminal_rounded),
-                  ),
-                  text: 'Raw Response',
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: TabBarView(
+    return Column(
+      children: [
+        Expanded(
+          child: DefaultTabController(
+            length: 2,
+            child: Column(
               children: [
-                SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const ServiceAccountCard(),
-                      const SizedBox(height: 14),
-                      const QuickTemplatesBar(),
-                      const SizedBox(height: 14),
-                      _buildPayloadCard(context, vm),
-                      const SizedBox(height: 16),
-                      _buildSendButton(vm),
-                      const SizedBox(height: 24),
+                Container(
+                  color: AppTheme.darkSurface,
+                  child: TabBar(
+                    tabs: [
+                      const Tab(icon: Icon(Icons.edit_note_rounded), text: 'Message Builder'),
+                      Tab(
+                        icon: Badge(
+                          isLabelVisible: vm.fcmResponse != null,
+                          backgroundColor: vm.fcmResponse?.isSuccess == true
+                              ? AppTheme.successGreen
+                              : AppTheme.errorRed,
+                          child: const Icon(Icons.terminal_rounded),
+                        ),
+                        text: 'Raw Response',
+                      ),
                     ],
                   ),
                 ),
-                const SingleChildScrollView(
-                  padding: EdgeInsets.all(16),
-                  child: RawResponseView(),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      SingleChildScrollView(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const ServiceAccountCard(),
+                            const SizedBox(height: 14),
+                            const QuickTemplatesBar(),
+                            const SizedBox(height: 14),
+                            _buildPayloadCard(context, vm),
+                            const SizedBox(height: 16),
+                          ],
+                        ),
+                      ),
+                      const SingleChildScrollView(
+                        padding: EdgeInsets.all(16),
+                        child: RawResponseView(),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
-        ],
-      ),
+        ),
+        // Persistent bottom Send button on mobile
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: const BoxDecoration(
+            color: AppTheme.darkSurface,
+            border: Border(
+              top: BorderSide(color: AppTheme.darkBorder),
+            ),
+          ),
+          child: SafeArea(
+            top: false,
+            child: _buildSendButton(vm),
+          ),
+        ),
+      ],
     );
   }
 
