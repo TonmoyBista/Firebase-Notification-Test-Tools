@@ -1,0 +1,232 @@
+name: Release Multiplatform Binaries
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    name: Build macOS Silicon DMG
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Build macOS Release
+        run: flutter build macos --release
+
+      - name: Package macOS DMG
+        run: |
+          mkdir -p build/dmg_staging
+          cp -R "build/macos/Build/Products/Release/Firebase Notification Test Tools.app" build/dmg_staging/
+          ln -s /Applications build/dmg_staging/Applications
+          hdiutil create -volname "Firebase Notification Test Tools" -srcfolder build/dmg_staging -ov -format UDZO Firebase_Notification_Test_Tools_macOS_Silicon.dmg
+
+      - name: Upload macOS Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: Firebase_Notification_Test_Tools_macOS_Silicon.dmg
+
+  build-windows:
+    name: Build Windows EXE
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Enable Windows Desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Build Windows Release
+        run: flutter build windows --release
+
+      - name: Package Windows Release (Installer EXE & Portable ZIP)
+        shell: pwsh
+        run: |
+          # Copy raw exe
+          Copy-Item "build\windows\x64\runner\Release\firebase_notification_test_tools.exe" -Destination "Firebase_Notification_Test_Tools_Windows.exe"
+          # Create ZIP portable bundle
+          Compress-Archive -Path "build\windows\x64\runner\Release\*" -DestinationPath "Firebase_Notification_Test_Tools_Windows_x64.zip"
+          # Compile Inno Setup installer if available
+          if (Get-Command iscc -ErrorAction SilentlyContinue) {
+            iscc windows\installer.iss
+          } elseif (Test-Path "C:\Program Files (x86)\Inno Setup 6\ISCC.exe") {
+            & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" windows\installer.iss
+          }
+
+      - name: Upload Windows Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-binaries
+          path: |
+            Firebase_Notification_Test_Tools_Windows*
+
+  build-linux:
+    name: Build Linux DEB
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Enable Linux Desktop
+        run: flutter config --enable-linux-desktop
+
+      - name: Build Linux Release
+        run: flutter build linux --release
+
+      - name: Package Debian (.deb)
+        run: |
+          mkdir -p deb_dist/DEBIAN
+          mkdir -p deb_dist/usr/bin
+          mkdir -p deb_dist/usr/lib/firebase_notification_test_tools
+          mkdir -p deb_dist/usr/share/applications
+          mkdir -p deb_dist/usr/share/icons/hicolor/256x256/apps
+
+          cp -r build/linux/x64/release/bundle/* deb_dist/usr/lib/firebase_notification_test_tools/
+          ln -s /usr/lib/firebase_notification_test_tools/firebase_notification_test_tools deb_dist/usr/bin/firebase_notification_test_tools
+
+          cat <<EOF > deb_dist/DEBIAN/control
+          Package: firebase-notification-test-tools
+          Version: 1.0.0
+          Section: devel
+          Priority: optional
+          Architecture: amd64
+          Maintainer: Tonmoy <tonmoy@example.com>
+          Description: Firebase Notification Test Tools
+           Testing tool for Firebase Cloud Messaging (FCM) v1 API notifications.
+          EOF
+
+          cat <<EOF > deb_dist/usr/share/applications/firebase_notification_test_tools.desktop
+          [Desktop Entry]
+          Name=Firebase Notification Test Tools
+          Comment=Test Firebase FCM v1 notifications
+          Exec=firebase_notification_test_tools
+          Icon=firebase_notification_test_tools
+          Terminal=false
+          Type=Application
+          Categories=Development;
+          EOF
+
+          cp macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_256.png deb_dist/usr/share/icons/hicolor/256x256/apps/firebase_notification_test_tools.png
+
+          dpkg-deb --build --root-owner-group deb_dist Firebase_Notification_Test_Tools_Linux_amd64.deb
+
+      - name: Upload Linux Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-deb
+          path: Firebase_Notification_Test_Tools_Linux_amd64.deb
+
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Build Android APK
+        run: flutter build apk --release
+
+      - name: Copy & Rename APK
+        run: cp build/app/outputs/flutter-apk/app-release.apk Firebase_Notification_Test_Tools_Android.apk
+
+      - name: Upload Android Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: Firebase_Notification_Test_Tools_Android.apk
+
+  publish-release:
+    name: Create GitHub Release & Upload Assets
+    needs: [build-macos, build-windows, build-linux, build-android]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release_assets
+          merge-multiple: true
+
+      - name: Set Release Tag
+        id: vars
+        run: |
+          if [ -n "${{ github.event.inputs.tag_name }}" ]; then
+            echo "tag=${{ github.event.inputs.tag_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release and Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.vars.outputs.tag }}
+          name: Firebase Notification Test Tools ${{ steps.vars.outputs.tag }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: release_assets/*
