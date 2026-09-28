@@ -29,7 +29,7 @@ class StorageRepositoryImpl implements IStorageRepository {
 
   @override
   Future<void> addHistoryItem(HistoryItemEntity item) async {
-    final list = await dataSource.getHistory();
+    final list = List<HistoryItemEntity>.from(await dataSource.getHistory());
     // Keep up to latest 50 items
     list.insert(0, item);
     if (list.length > 50) {
@@ -45,7 +45,7 @@ class StorageRepositoryImpl implements IStorageRepository {
 
   @override
   Future<void> deleteHistoryItem(String id) async {
-    final list = await dataSource.getHistory();
+    final list = List<HistoryItemEntity>.from(await dataSource.getHistory());
     list.removeWhere((element) => element.id == id);
     await dataSource.saveHistory(list);
   }

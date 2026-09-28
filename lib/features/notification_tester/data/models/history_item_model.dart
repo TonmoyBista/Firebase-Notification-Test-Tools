@@ -73,12 +73,12 @@ class HistoryItemModel extends HistoryItemEntity {
       final decoded = jsonDecode(rawJson);
       if (decoded is List) {
         return decoded
-            .map((item) => HistoryItemModel.fromJson(item as Map<String, dynamic>))
+            .map<HistoryItemEntity>((item) => HistoryItemModel.fromJson(item as Map<String, dynamic>))
             .toList();
       }
-      return [];
+      return <HistoryItemEntity>[];
     } catch (_) {
-      return [];
+      return <HistoryItemEntity>[];
     }
   }
 }

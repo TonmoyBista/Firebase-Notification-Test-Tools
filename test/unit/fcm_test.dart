@@ -2,7 +2,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:firebase_notification_test_tools/core/errors/exceptions.dart';
 import 'package:firebase_notification_test_tools/core/utils/json_utils.dart';
 import 'package:firebase_notification_test_tools/features/notification_tester/data/models/fcm_response_model.dart';
+import 'package:firebase_notification_test_tools/features/notification_tester/data/models/history_item_model.dart';
 import 'package:firebase_notification_test_tools/features/notification_tester/domain/entities/fcm_message_entity.dart';
+import 'package:firebase_notification_test_tools/features/notification_tester/domain/entities/history_item_entity.dart';
 import 'package:firebase_notification_test_tools/features/notification_tester/domain/usecases/parse_service_account_usecase.dart';
 
 void main() {
@@ -164,6 +166,49 @@ void main() {
       expect(curl.contains('curl -X POST'), isTrue);
       expect(curl.contains('Bearer ya29.testtoken'), isTrue);
       expect(curl.contains('https://fcm.googleapis.com'), isTrue);
+    });
+  });
+
+  group('History Storage Subtyping Tests', () {
+    test('should encode, decode and mutate history list with HistoryItemEntity without subtype error', () {
+      final item1 = HistoryItemEntity(
+        id: '1',
+        timestamp: DateTime.now(),
+        projectId: 'proj-1',
+        target: 'tok-1',
+        title: 'Title 1',
+        body: 'Body 1',
+        payloadJson: '{}',
+        statusCode: 200,
+        responseBody: 'ok',
+        latencyMs: 50,
+        isSuccess: true,
+      );
+
+      final encoded = HistoryItemModel.encodeList([item1]);
+      final list = HistoryItemModel.decodeList(encoded);
+
+      expect(list.length, 1);
+
+      // Now insert another HistoryItemEntity into the list!
+      final item2 = HistoryItemEntity(
+        id: '2',
+        timestamp: DateTime.now(),
+        projectId: 'proj-2',
+        target: 'tok-2',
+        title: 'Title 2',
+        body: 'Body 2',
+        payloadJson: '{}',
+        statusCode: 200,
+        responseBody: 'ok',
+        latencyMs: 60,
+        isSuccess: true,
+      );
+
+      // This previously threw: type 'HistoryItemEntity' is not a subtype of type 'HistoryItemModel' of 'element'
+      list.insert(0, item2);
+      expect(list.length, 2);
+      expect(list.first.id, '2');
     });
   });
 }
