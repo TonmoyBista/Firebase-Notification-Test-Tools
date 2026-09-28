@@ -80,9 +80,9 @@ jobs:
           Compress-Archive -Path "build\windows\x64\runner\Release\*" -DestinationPath "Firebase_Notification_Test_Tools_Windows_x64.zip"
           # Compile Inno Setup installer if available
           if (Get-Command iscc -ErrorAction SilentlyContinue) {
-            iscc windows\installer.iss
+            iscc installer.iss
           } elseif (Test-Path "C:\Program Files (x86)\Inno Setup 6\ISCC.exe") {
-            & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" windows\installer.iss
+            & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
           }
 
       - name: Upload Windows Artifacts
