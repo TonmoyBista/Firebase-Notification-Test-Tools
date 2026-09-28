@@ -333,8 +333,25 @@ class NotificationTesterViewModel extends ChangeNotifier {
   Future<void> sendNotification() async {
     _clearMessages();
 
+    // Verify payload JSON
+    String payload = rawJsonController.text.trim();
+    if (payload.isEmpty) {
+      _syncFormToRawJson();
+      payload = rawJsonController.text.trim();
+    }
+
     if (_serviceAccount == null) {
-      _errorMessage = 'Please select a Firebase Service Account JSON first.';
+      _fcmResponse = FcmResponseEntity(
+        statusCode: 0,
+        isSuccess: false,
+        rawBody: 'Please load a Firebase Service Account JSON first to authenticate with Google FCM v1 API.',
+        headers: {},
+        timestamp: DateTime.now(),
+        latencyMs: 0,
+        errorMessage: 'Missing Service Account credentials.',
+        requestUrl: '',
+        requestPayload: payload,
+      );
       notifyListeners();
       return;
     }
@@ -345,15 +362,18 @@ class NotificationTesterViewModel extends ChangeNotifier {
       if (_authToken == null) return;
     }
 
-    // Verify payload JSON
-    String payload = rawJsonController.text.trim();
-    if (payload.isEmpty) {
-      _syncFormToRawJson();
-      payload = rawJsonController.text.trim();
-    }
-
     if (!JsonUtils.isValid(payload)) {
-      _errorMessage = 'The message payload contains invalid JSON syntax.';
+      _fcmResponse = FcmResponseEntity(
+        statusCode: 0,
+        isSuccess: false,
+        rawBody: 'Validation Error: Payload contains invalid JSON syntax.',
+        headers: {},
+        timestamp: DateTime.now(),
+        latencyMs: 0,
+        errorMessage: 'Invalid JSON payload syntax.',
+        requestUrl: AppConstants.getFcmSendUrl(_serviceAccount!.projectId),
+        requestPayload: payload,
+      );
       notifyListeners();
       return;
     }
@@ -369,12 +389,6 @@ class NotificationTesterViewModel extends ChangeNotifier {
       );
 
       _fcmResponse = response;
-
-      if (response.isSuccess) {
-        _successMessage = 'Notification sent successfully! (Status: ${response.statusCode})';
-      } else {
-        _errorMessage = 'Send failed with status: ${response.statusCode}';
-      }
 
       // Add to history
       final historyItem = HistoryItemEntity(
@@ -398,9 +412,31 @@ class NotificationTesterViewModel extends ChangeNotifier {
       await manageHistoryUseCase.addHistory(historyItem);
       _history = await manageHistoryUseCase.getHistory();
     } on Failure catch (f) {
-      _errorMessage = f.message;
+      _fcmResponse = FcmResponseEntity(
+        statusCode: (f is ServerFailure) ? (f.statusCode ?? 0) : 0,
+        isSuccess: false,
+        rawBody: (f is ServerFailure && f.rawResponse != null)
+            ? f.rawResponse!
+            : 'Error: ${f.message}',
+        headers: {},
+        timestamp: DateTime.now(),
+        latencyMs: 0,
+        errorMessage: f.message,
+        requestUrl: AppConstants.getFcmSendUrl(_serviceAccount!.projectId),
+        requestPayload: payload,
+      );
     } catch (e) {
-      _errorMessage = 'Unexpected error: $e';
+      _fcmResponse = FcmResponseEntity(
+        statusCode: 0,
+        isSuccess: false,
+        rawBody: 'Unexpected error occurred: $e',
+        headers: {},
+        timestamp: DateTime.now(),
+        latencyMs: 0,
+        errorMessage: e.toString(),
+        requestUrl: AppConstants.getFcmSendUrl(_serviceAccount!.projectId),
+        requestPayload: payload,
+      );
     } finally {
       _isLoading = false;
       notifyListeners();
