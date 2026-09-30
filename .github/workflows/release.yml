@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release Tag (e.g. v1.0.0)'
+        description: 'Release Tag (e.g. v1.0.1)'
         required: true
-        default: 'v1.0.0'
+        default: 'v1.0.1'
 
 permissions:
   contents: write
@@ -146,10 +146,20 @@ exec /usr/lib/firebase_notification_test_tools/firebase_notification_test_tools 
 EOF
           chmod 755 deb_dist/usr/bin/firebase_notification_test_tools
 
+          # Determine package version from tag
+          RAW_TAG="${{ github.event.inputs.tag_name }}"
+          if [ -z "$RAW_TAG" ]; then
+            RAW_TAG="${GITHUB_REF_NAME}"
+          fi
+          PKG_VER="${RAW_TAG#v}"
+          if [ -z "$PKG_VER" ] || [ "$PKG_VER" = "main" ] || [ "$PKG_VER" = "master" ]; then
+            PKG_VER="1.0.1"
+          fi
+
           # Define package control file with runtime dependencies
           cat <<EOF > deb_dist/DEBIAN/control
 Package: firebase-notification-test-tools
-Version: 1.0.0
+Version: ${PKG_VER}
 Section: devel
 Priority: optional
 Architecture: amd64
