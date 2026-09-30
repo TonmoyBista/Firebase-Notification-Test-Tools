@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   build-macos:
-    name: Build macOS Silicon DMG
+    name: Build macOS Universal (Intel x86_64 & Apple Silicon arm64) DMG
     runs-on: macos-latest
     steps:
       - name: Checkout Repository
@@ -32,24 +32,27 @@ jobs:
       - name: Install Dependencies
         run: flutter pub get
 
-      - name: Build macOS Release
+      - name: Build macOS Release (Universal arm64 + x86_64)
         run: flutter build macos --release
 
-      - name: Package macOS DMG
+      - name: Package macOS Universal & Intel DMGs
         run: |
           mkdir -p build/dmg_staging
           cp -R "build/macos/Build/Products/Release/Firebase Notification Test Tools.app" build/dmg_staging/
           ln -s /Applications build/dmg_staging/Applications
-          hdiutil create -volname "Firebase Notification Test Tools" -srcfolder build/dmg_staging -ov -format UDZO Firebase_Notification_Test_Tools_macOS_Silicon.dmg
+          hdiutil create -volname "Firebase Notification Test Tools" -srcfolder build/dmg_staging -ov -format UDZO Firebase_Notification_Test_Tools_macOS_Universal.dmg
+          # Provide explicit Intel x86_64 and Silicon aliases
+          cp Firebase_Notification_Test_Tools_macOS_Universal.dmg Firebase_Notification_Test_Tools_macOS_Intel_x86_64.dmg
+          cp Firebase_Notification_Test_Tools_macOS_Universal.dmg Firebase_Notification_Test_Tools_macOS_Silicon.dmg
 
-      - name: Upload macOS Artifact
+      - name: Upload macOS Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: macos-dmg
-          path: Firebase_Notification_Test_Tools_macOS_Silicon.dmg
+          path: Firebase_Notification_Test_Tools_macOS*
 
   build-windows:
-    name: Build Windows EXE
+    name: Build Windows EXE (x86_64 / x64)
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
@@ -93,8 +96,8 @@ jobs:
             Firebase_Notification_Test_Tools_Windows*
 
   build-linux:
-    name: Build Linux DEB
-    runs-on: ubuntu-latest
+    name: Build Linux DEB & Portable Bundle (x86_64 / amd64)
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -102,7 +105,7 @@ jobs:
       - name: Install Linux Build Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -120,8 +123,13 @@ jobs:
       - name: Build Linux Release
         run: flutter build linux --release
 
-      - name: Package Debian (.deb)
+      - name: Package Debian (.deb) & Portable Archive
         run: |
+          # 1. Create portable tar.gz bundle for x86_64 / Intel
+          tar -czvf Firebase_Notification_Test_Tools_Linux_x64.tar.gz -C build/linux/x64/release/bundle .
+          cp Firebase_Notification_Test_Tools_Linux_x64.tar.gz Firebase_Notification_Test_Tools_Linux_Intel_x86_64.tar.gz
+
+          # 2. Prepare Debian package structure
           mkdir -p deb_dist/DEBIAN
           mkdir -p deb_dist/usr/bin
           mkdir -p deb_dist/usr/lib/firebase_notification_test_tools
@@ -129,42 +137,54 @@ jobs:
           mkdir -p deb_dist/usr/share/icons/hicolor/256x256/apps
 
           cp -r build/linux/x64/release/bundle/* deb_dist/usr/lib/firebase_notification_test_tools/
-          ln -s /usr/lib/firebase_notification_test_tools/firebase_notification_test_tools deb_dist/usr/bin/firebase_notification_test_tools
+          chmod 755 deb_dist/usr/lib/firebase_notification_test_tools/firebase_notification_test_tools
 
+          # Create launcher script in /usr/bin
+          cat << 'EOF' > deb_dist/usr/bin/firebase_notification_test_tools
+#!/bin/sh
+exec /usr/lib/firebase_notification_test_tools/firebase_notification_test_tools "$@"
+EOF
+          chmod 755 deb_dist/usr/bin/firebase_notification_test_tools
+
+          # Define package control file with runtime dependencies
           cat <<EOF > deb_dist/DEBIAN/control
-          Package: firebase-notification-test-tools
-          Version: 1.0.0
-          Section: devel
-          Priority: optional
-          Architecture: amd64
-          Maintainer: Tonmoy <tonmoy@example.com>
-          Description: Firebase Notification Test Tools
-           Testing tool for Firebase Cloud Messaging (FCM) v1 API notifications.
-          EOF
+Package: firebase-notification-test-tools
+Version: 1.0.0
+Section: devel
+Priority: optional
+Architecture: amd64
+Maintainer: Tonmoy <tonmoy@example.com>
+Depends: libgtk-3-0 (>= 3.0.0), libglib2.0-0 (>= 2.40.0), zenity, xdg-utils
+Description: Firebase Notification Test Tools (Intel / AMD x86_64)
+ Testing tool for Firebase Cloud Messaging (FCM) v1 API notifications.
+EOF
 
           cat <<EOF > deb_dist/usr/share/applications/firebase_notification_test_tools.desktop
-          [Desktop Entry]
-          Name=Firebase Notification Test Tools
-          Comment=Test Firebase FCM v1 notifications
-          Exec=firebase_notification_test_tools
-          Icon=firebase_notification_test_tools
-          Terminal=false
-          Type=Application
-          Categories=Development;
-          EOF
+[Desktop Entry]
+Name=Firebase Notification Test Tools
+Comment=Test Firebase FCM v1 notifications
+Exec=firebase_notification_test_tools
+Icon=firebase_notification_test_tools
+Terminal=false
+Type=Application
+Categories=Development;Utility;
+StartupNotify=true
+EOF
 
           cp macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_256.png deb_dist/usr/share/icons/hicolor/256x256/apps/firebase_notification_test_tools.png
 
           dpkg-deb --build --root-owner-group deb_dist Firebase_Notification_Test_Tools_Linux_amd64.deb
+          cp Firebase_Notification_Test_Tools_Linux_amd64.deb Firebase_Notification_Test_Tools_Linux_Intel_x86_64.deb
 
-      - name: Upload Linux Artifact
+      - name: Upload Linux Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: linux-deb
-          path: Firebase_Notification_Test_Tools_Linux_amd64.deb
+          name: linux-binaries
+          path: |
+            Firebase_Notification_Test_Tools_Linux*
 
   build-android:
-    name: Build Android APK
+    name: Build Android APK (Universal & Intel x86_64)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -186,17 +206,27 @@ jobs:
       - name: Install Dependencies
         run: flutter pub get
 
-      - name: Build Android APK
-        run: flutter build apk --release
+      - name: Build Android APK (Fat & Split ABIs)
+        run: |
+          flutter build apk --release
+          flutter build apk --release --split-per-abi
 
-      - name: Copy & Rename APK
-        run: cp build/app/outputs/flutter-apk/app-release.apk Firebase_Notification_Test_Tools_Android.apk
+      - name: Copy & Name APKs
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk Firebase_Notification_Test_Tools_Android.apk
+          cp build/app/outputs/flutter-apk/app-release.apk Firebase_Notification_Test_Tools_Android_Universal.apk
+          if [ -f build/app/outputs/flutter-apk/app-x86_64-release.apk ]; then
+            cp build/app/outputs/flutter-apk/app-x86_64-release.apk Firebase_Notification_Test_Tools_Android_Intel_x86_64.apk
+          fi
+          if [ -f build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ]; then
+            cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk Firebase_Notification_Test_Tools_Android_arm64.apk
+          fi
 
-      - name: Upload Android Artifact
+      - name: Upload Android Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: android-apk
-          path: Firebase_Notification_Test_Tools_Android.apk
+          path: Firebase_Notification_Test_Tools_Android*
 
   publish-release:
     name: Create GitHub Release & Upload Assets
