@@ -1,10 +1,10 @@
-name: Build Windows Application
-
+name: Development CI
+ 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ development, develop, dev ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ development, develop, dev, main ]
   workflow_dispatch:
 
 jobs:

@@ -2,14 +2,16 @@ name: Release Multiplatform Binaries
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release Tag (e.g. v1.0.1)'
-        required: true
-        default: 'v1.0.1'
+        description: 'Release Tag (leave empty to auto-detect from pubspec.yaml)'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -140,46 +142,50 @@ jobs:
           chmod 755 deb_dist/usr/lib/firebase_notification_test_tools/firebase_notification_test_tools
 
           # Create launcher script in /usr/bin
-          cat << 'EOF' > deb_dist/usr/bin/firebase_notification_test_tools
-#!/bin/sh
-exec /usr/lib/firebase_notification_test_tools/firebase_notification_test_tools "$@"
-EOF
+          {
+            echo '#!/bin/sh'
+            echo 'exec /usr/lib/firebase_notification_test_tools/firebase_notification_test_tools "$@"'
+          } > deb_dist/usr/bin/firebase_notification_test_tools
           chmod 755 deb_dist/usr/bin/firebase_notification_test_tools
 
-          # Determine package version from tag
+          # Determine package version from tag or pubspec.yaml
           RAW_TAG="${{ github.event.inputs.tag_name }}"
-          if [ -z "$RAW_TAG" ]; then
+          if [ -z "$RAW_TAG" ] && [[ "${GITHUB_REF}" == refs/tags/* ]]; then
             RAW_TAG="${GITHUB_REF_NAME}"
           fi
           PKG_VER="${RAW_TAG#v}"
           if [ -z "$PKG_VER" ] || [ "$PKG_VER" = "main" ] || [ "$PKG_VER" = "master" ]; then
+            PKG_VER=$(grep '^version: ' pubspec.yaml | sed 's/version: //' | sed 's/+.*//' | tr -d '[:space:]')
+          fi
+          if [ -z "$PKG_VER" ]; then
             PKG_VER="1.0.1"
           fi
 
           # Define package control file with runtime dependencies
-          cat <<EOF > deb_dist/DEBIAN/control
-Package: firebase-notification-test-tools
-Version: ${PKG_VER}
-Section: devel
-Priority: optional
-Architecture: amd64
-Maintainer: Tonmoy <tonmoy@example.com>
-Depends: libgtk-3-0 (>= 3.0.0), libglib2.0-0 (>= 2.40.0), zenity, xdg-utils
-Description: Firebase Notification Test Tools (Intel / AMD x86_64)
- Testing tool for Firebase Cloud Messaging (FCM) v1 API notifications.
-EOF
+          {
+            echo "Package: firebase-notification-test-tools"
+            echo "Version: ${PKG_VER}"
+            echo "Section: devel"
+            echo "Priority: optional"
+            echo "Architecture: amd64"
+            echo "Maintainer: Tonmoy <tonmoy@example.com>"
+            echo "Depends: libgtk-3-0 (>= 3.0.0), libglib2.0-0 (>= 2.40.0), zenity, xdg-utils"
+            echo "Description: Firebase Notification Test Tools (Intel / AMD x86_64)"
+            echo " Testing tool for Firebase Cloud Messaging (FCM) v1 API notifications."
+          } > deb_dist/DEBIAN/control
 
-          cat <<EOF > deb_dist/usr/share/applications/firebase_notification_test_tools.desktop
-[Desktop Entry]
-Name=Firebase Notification Test Tools
-Comment=Test Firebase FCM v1 notifications
-Exec=firebase_notification_test_tools
-Icon=firebase_notification_test_tools
-Terminal=false
-Type=Application
-Categories=Development;Utility;
-StartupNotify=true
-EOF
+          # Define desktop launcher
+          {
+            echo "[Desktop Entry]"
+            echo "Name=Firebase Notification Test Tools"
+            echo "Comment=Test Firebase FCM v1 notifications"
+            echo "Exec=firebase_notification_test_tools"
+            echo "Icon=firebase_notification_test_tools"
+            echo "Terminal=false"
+            echo "Type=Application"
+            echo "Categories=Development;Utility;"
+            echo "StartupNotify=true"
+          } > deb_dist/usr/share/applications/firebase_notification_test_tools.desktop
 
           cp macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_256.png deb_dist/usr/share/icons/hicolor/256x256/apps/firebase_notification_test_tools.png
 
@@ -256,10 +262,14 @@ EOF
         id: vars
         run: |
           if [ -n "${{ github.event.inputs.tag_name }}" ]; then
-            echo "tag=${{ github.event.inputs.tag_name }}" >> $GITHUB_OUTPUT
+            TAG="${{ github.event.inputs.tag_name }}"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${{ github.ref_name }}"
           else
-            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            VERSION=$(grep '^version: ' pubspec.yaml | sed 's/version: //' | sed 's/+.*//' | tr -d '[:space:]')
+            TAG="v${VERSION}"
           fi
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
 
       - name: Create Release and Upload Assets
         uses: softprops/action-gh-release@v2
